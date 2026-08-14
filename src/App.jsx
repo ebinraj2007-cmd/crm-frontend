@@ -55,6 +55,7 @@ export default function CRMApp() {
   });
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [page, setPage] = useState('dashboard');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -91,29 +92,36 @@ export default function CRMApp() {
       <Styles />
 
       <header className="topbar">
+        <button className="burger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
+          {menuOpen ? '✕' : '☰'}
+        </button>
+
         <div className="brand">
           <span className="brand-mark">DS</span>
           <span className="brand-name">Digital Services CRM</span>
         </div>
 
-        <nav className="nav">
+        <nav className={`nav ${menuOpen ? 'open' : ''}`}>
           {NAV.map(n => (
             <button
               key={n.key}
-              onClick={() => setPage(n.key)}
+              onClick={() => { setPage(n.key); setMenuOpen(false); }}
               className={`nav-btn ${page === n.key ? 'active' : ''}`}
             >
               {n.label}
             </button>
           ))}
+          <button className="nav-btn signout-mobile" onClick={handleLogout}>Sign out</button>
         </nav>
 
         <div className="who">
           <span className="who-name">{user?.name}</span>
           <span className={`role-chip ${isAdmin ? 'admin' : ''}`}>{isAdmin ? 'admin' : 'sales rep'}</span>
-          <button className="btn-ghost" onClick={handleLogout}>Sign out</button>
+          <button className="btn-ghost desktop-only" onClick={handleLogout}>Sign out</button>
         </div>
       </header>
+
+      {menuOpen && <div className="menu-scrim" onClick={() => setMenuOpen(false)} />}
 
       <main className="main">
         {page === 'dashboard' && <DashboardPage token={token} user={user} />}
@@ -359,10 +367,10 @@ function OperationsPage({ token }) {
             )}
             {shown.map((i, k) => (
               <tr key={k}>
-                <td className="strong">{i.client.business_name}</td>
-                <td>{i.service.name}</td>
-                <td>{money(i.service.price)}</td>
-                <td>{fmtDate(i.client.deadline)}</td>
+                <td data-label="Client" className="strong">{i.client.business_name}</td>
+                <td data-label="Service">{i.service.name}</td>
+                <td data-label="Value">{money(i.service.price)}</td>
+                <td data-label="Deadline">{fmtDate(i.client.deadline)}</td>
                 <td>
                   <select
                     className={`status-select ${i.service.status || 'pending'}`}
@@ -474,7 +482,7 @@ function ClientsPage({ token, user }) {
             )}
             {list.map((c, i) => (
               <tr key={c.id} className={c.completed ? 'is-done' : ''}>
-                <td>
+                <td data-label="Rank">
                   <div className="rank">
                     <button className="arrow" title="Move up" disabled={!!term || i === 0}
                       onClick={() => move(i, -1)}>▲</button>
@@ -484,7 +492,7 @@ function ClientsPage({ token, user }) {
                   </div>
                 </td>
 
-                <td>
+                <td data-label="Company">
                   <button className="company" onClick={() => setOpen(c)}>{c.business_name}</button>
                   <div className="sub">
                     {c.contact_person || '—'}{c.phone ? ` · ${c.phone}` : ''}
@@ -496,26 +504,26 @@ function ClientsPage({ token, user }) {
                   </div>
                 </td>
 
-                <td>
+                <td data-label="Source">
                   <select className="cell-select" value={c.source || 'cold_call'}
                     onChange={e => patch(c.id, { source: e.target.value })}>
                     {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </td>
 
-                <td className="about">{c.about || <span className="muted">—</span>}</td>
+                <td data-label="About" className="about">{c.about || <span className="muted">—</span>}</td>
 
-                {isAdmin && <td className="sub">{c.users?.name || '—'}</td>}
+                {isAdmin && <td data-label="Added by" className="sub">{c.users?.name || '—'}</td>}
 
-                <td className="sub">{fmtDate(c.created_at)}</td>
+                <td data-label="Added" className="sub">{fmtDate(c.created_at)}</td>
 
-                <td>
+                <td data-label="Deadline">
                   <input type="date" className="cell-input"
                     value={c.deadline ? String(c.deadline).slice(0, 10) : ''}
                     onChange={e => patch(c.id, { deadline: e.target.value || null })} />
                 </td>
 
-                <td>
+                <td data-label="Priority">
                   <select className={`cell-select prio-${c.priority || 'low'}`} value={c.priority || 'low'}
                     onChange={e => patch(c.id, { priority: e.target.value })}>
                     <option value="high">high</option>
@@ -524,7 +532,7 @@ function ClientsPage({ token, user }) {
                   </select>
                 </td>
 
-                <td><button className="btn-ghost sm" onClick={() => setOpen(c)}>Open</button></td>
+                <td data-label=""><button className="btn-ghost sm wide-mobile" onClick={() => setOpen(c)}>Open details</button></td>
               </tr>
             ))}
           </tbody>
@@ -871,8 +879,8 @@ function ProductPage() {
             <tbody>
               {SERVICES.filter(s => s.category === cat).map(s => (
                 <tr key={s.name}>
-                  <td className="strong">{s.name}</td>
-                  <td className="accent-text">{money(s.price)}</td>
+                  <td data-label="Service" className="strong">{s.name}</td>
+                  <td data-label="Price" className="accent-text">{money(s.price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -886,7 +894,7 @@ function ProductPage() {
           <thead><tr><th>Item</th><th style={{ width: 160 }}>Typical cost</th></tr></thead>
           <tbody>
             {COMMON_EXTRAS.map(e => (
-              <tr key={e.label}><td>{e.label}</td><td className="accent-text">{money(e.amount)}</td></tr>
+              <tr key={e.label}><td data-label="Item">{e.label}</td><td data-label="Cost" className="accent-text">{money(e.amount)}</td></tr>
             ))}
           </tbody>
         </table>
@@ -966,13 +974,13 @@ function InvoicesPage({ token, user }) {
             {invoices.length === 0 && <tr><td colSpan={8} className="muted pad">No invoices yet.</td></tr>}
             {invoices.map(i => (
               <tr key={i.id}>
-                <td className="strong">{i.invoice_number}</td>
-                <td>{i.clients?.business_name || '—'}</td>
-                <td className="sub">{fmtDate(i.created_at)}</td>
-                <td>{money(i.total)}</td>
-                <td>{money(i.advance)}</td>
-                <td className="accent-text">{money((i.total || 0) - (i.advance || 0))}</td>
-                <td>
+                <td data-label="Invoice" className="strong">{i.invoice_number}</td>
+                <td data-label="Client">{i.clients?.business_name || '—'}</td>
+                <td data-label="Date" className="sub">{fmtDate(i.created_at)}</td>
+                <td data-label="Total">{money(i.total)}</td>
+                <td data-label="Advance">{money(i.advance)}</td>
+                <td data-label="Balance" className="accent-text">{money((i.total || 0) - (i.advance || 0))}</td>
+                <td data-label="Status">
                   <select className={`cell-select st-${i.status}`} value={i.status}
                     onChange={e => setStatus(i, e.target.value)}>
                     <option value="unpaid">unpaid</option>
@@ -980,7 +988,7 @@ function InvoicesPage({ token, user }) {
                     <option value="paid">paid</option>
                   </select>
                 </td>
-                <td className="right">
+                <td data-label="" className="right">
                   <button className="btn-ghost sm" onClick={() => setView(i)}>View</button>
                   {isAdmin && <button className="btn-ghost sm danger" onClick={() => remove(i)}>Delete</button>}
                 </td>
@@ -1150,7 +1158,7 @@ function InvoiceView({ invoice, onClose }) {
             <thead><tr><th>Description</th><th className="right" style={{ width: 140 }}>Amount</th></tr></thead>
             <tbody>
               {lines.map((l, i) => (
-                <tr key={i}><td>{l.label}</td><td className="right">{money(l.amount)}</td></tr>
+                <tr key={i}><td data-label="Item">{l.label}</td><td data-label="Amount" className="right">{money(l.amount)}</td></tr>
               ))}
             </tbody>
           </table>
@@ -1224,16 +1232,16 @@ function FinancePage({ token }) {
               const m = r.revenue ? Math.round((profit / r.revenue) * 100) : 0;
               return (
                 <tr key={r.id}>
-                  <td className="strong">{r.business_name}</td>
-                  <td className="sub">{r.rep || '—'}</td>
-                  <td className="sub">{fmtDate(r.updated_at || r.created_at)}</td>
-                  <td>{money(r.revenue)}</td>
-                  <td>
+                  <td data-label="Project" className="strong">{r.business_name}</td>
+                  <td data-label="Rep" className="sub">{r.rep || '—'}</td>
+                  <td data-label="Completed" className="sub">{fmtDate(r.updated_at || r.created_at)}</td>
+                  <td data-label="Revenue">{money(r.revenue)}</td>
+                  <td data-label="Cost">
                     <input type="number" className="cell-input" value={r.cost || 0}
                       onChange={e => setCost(r, e.target.value)} />
                   </td>
-                  <td className={profit >= 0 ? 'pos' : 'neg'}>{money(profit)}</td>
-                  <td className={profit >= 0 ? 'pos' : 'neg'}>{m}%</td>
+                  <td data-label="Profit" className={profit >= 0 ? 'pos' : 'neg'}>{money(profit)}</td>
+                  <td data-label="Margin" className={profit >= 0 ? 'pos' : 'neg'}>{m}%</td>
                 </tr>
               );
             })}
@@ -1271,10 +1279,10 @@ function TeamPage({ token }) {
             {reps.length === 0 && <tr><td colSpan={4} className="muted pad">No sales reps registered yet.</td></tr>}
             {reps.map(r => (
               <tr key={r.repId}>
-                <td className="strong">{r.repName}</td>
-                <td className="sub">{r.email}</td>
-                <td>{r.clientCount}</td>
-                <td className="sub">{fmtDate(r.lastClient)}</td>
+                <td data-label="Rep" className="strong">{r.repName}</td>
+                <td data-label="Email" className="sub">{r.email}</td>
+                <td data-label="Clients">{r.clientCount}</td>
+                <td data-label="Last added" className="sub">{fmtDate(r.lastClient)}</td>
               </tr>
             ))}
           </tbody>
@@ -1495,6 +1503,93 @@ function Styles() {
       .login-card input{margin-bottom:11px;text-align:left}
       .alert{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#F87171;
         border-radius:7px;padding:9px;font-size:13px;margin-bottom:11px}
+
+      /* ---------- mobile ---------- */
+      .burger{display:none;background:none;border:0;color:var(--text);font-size:19px;
+        cursor:pointer;padding:6px 8px;line-height:1;font-family:inherit}
+      .menu-scrim{display:none}
+      .signout-mobile{display:none}
+      .wide-mobile{}
+
+      @media(max-width:1024px){
+        .topbar{position:sticky;gap:12px}
+        .burger{display:block}
+        .desktop-only{display:none}
+        .signout-mobile{display:block;border-top:1px solid var(--line);margin-top:6px;
+          padding-top:12px;color:#F87171}
+        .nav{display:none;position:fixed;top:60px;left:0;right:0;background:var(--surface);
+          border-bottom:1px solid var(--line);flex-direction:column;gap:2px;padding:10px;
+          z-index:80;max-height:calc(100vh - 60px);overflow-y:auto;
+          box-shadow:0 18px 34px rgba(0,0,0,.5)}
+        .nav.open{display:flex}
+        .nav-btn{width:100%;text-align:left;padding:14px 16px;font-size:15px;border-radius:8px}
+        .menu-scrim{display:block;position:fixed;inset:60px 0 0;background:rgba(0,0,0,.5);z-index:70}
+        .brand-name{font-size:14px}
+        .who-name{display:none}
+      }
+
+      @media(max-width:768px){
+        .main{padding:18px 14px 50px}
+        .topbar{padding:0 10px}
+        .brand-name{display:none}
+        .page-head h2{font-size:19px}
+        .row-between{flex-direction:column;align-items:stretch}
+        .search{max-width:none;width:100%}
+        .stat-row{grid-template-columns:1fr 1fr;gap:10px}
+        .stat{padding:13px 14px}
+        .stat-value{font-size:19px}
+        .stat-label{font-size:10.5px}
+        .two{grid-template-columns:1fr}
+        .grid-2{grid-template-columns:1fr}
+
+        /* inputs at 16px stop iOS from zooming on focus */
+        input,select,textarea{font-size:16px;padding:11px}
+        .cell-select,.cell-input{font-size:15px;padding:9px}
+
+        /* tables become stacked cards */
+        .table thead{display:none}
+        .table,.table tbody,.table tr,.table td{display:block;width:100%}
+        .table tr{border-bottom:1px solid var(--line);padding:14px}
+        .table tbody tr:last-child{border-bottom:0}
+        .table td{border:0;padding:7px 0;display:flex;justify-content:space-between;
+          align-items:center;gap:14px;text-align:right}
+        .table td::before{content:attr(data-label);color:var(--muted);font-size:10.5px;
+          text-transform:uppercase;letter-spacing:.6px;text-align:left;flex-shrink:0}
+        .table td[data-label=""]::before{display:none}
+        .table td[data-label=""]{justify-content:stretch}
+        .table td .cell-select,.table td .cell-input{max-width:190px}
+        .about{max-width:none;text-align:right}
+        .clients-table td{vertical-align:middle}
+        .company{font-size:16px;text-align:right;width:100%}
+        .flags{justify-content:flex-end}
+        .sub{text-align:right}
+        .rank{flex-direction:row;gap:14px}
+        .arrow{font-size:15px;padding:6px 12px;border:1px solid var(--line);border-radius:7px}
+        .wide-mobile{width:100%;margin:4px 0 0;padding:11px}
+        .btn-ghost.sm{margin-left:0;margin-right:6px;padding:9px 14px;font-size:13px}
+        .right{text-align:right}
+
+        .drawer{width:100%}
+        .wide-drawer{width:100%}
+        .drawer-body{padding:16px}
+        .svc-line{grid-template-columns:1fr auto;gap:8px}
+        .svc-line select{grid-column:1 / -1}
+        .line-item{grid-template-columns:1fr auto;gap:8px}
+        .line-item input[type=number]{grid-column:1}
+        .form-foot{flex-direction:column;align-items:stretch}
+        .form-foot .btn-primary,.form-foot .btn-ghost{width:100%;margin:4px 0}
+        .svc-grid{grid-template-columns:1fr}
+        .filter-row{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}
+        .filter{flex-shrink:0}
+        .inv-head{flex-direction:column;gap:12px}
+        .drawer-foot{flex-direction:column-reverse}
+        .drawer-foot button{width:100%}
+        .row-line{flex-direction:column;align-items:flex-start;gap:8px}
+      }
+
+      @media(max-width:400px){
+        .stat-row{grid-template-columns:1fr}
+      }
 
       @media print{
         .topbar,.drawer-head,.drawer-foot{display:none !important}
