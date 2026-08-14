@@ -121,7 +121,7 @@ export default function CRMApp() {
         {page === 'clients' && <ClientsPage token={token} user={user} />}
         {page === 'new-client' && <NewClientPage token={token} setPage={setPage} />}
         {page === 'product' && <ProductPage />}
-        {page === 'invoices' && <InvoicesPage token={token} />}
+        {page === 'invoices' && <InvoicesPage token={token} user={user} />}
         {page === 'finance' && isAdmin && <FinancePage token={token} />}
         {page === 'team' && isAdmin && <TeamPage token={token} />}
       </main>
@@ -425,10 +425,15 @@ function ClientsPage({ token, user }) {
   };
 
   const remove = async (c) => {
-    if (!window.confirm(`Delete ${c.business_name}? This cannot be undone.`)) return;
-    await axios.delete(`${API_URL}/clients/${c.id}`, auth(token));
-    setOpen(null);
-    load();
+    if (!isAdmin) return alert('Only an admin can delete a client.');
+    if (!window.confirm(`Delete ${c.business_name}? This also deletes their invoices and cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API_URL}/clients/${c.id}`, auth(token));
+      setOpen(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Could not delete');
+    }
   };
 
   const term = q.trim().toLowerCase();
@@ -530,6 +535,7 @@ function ClientsPage({ token, user }) {
         <ClientDrawer
           client={open}
           token={token}
+          user={user}
           onClose={() => setOpen(null)}
           onSaved={() => { setOpen(null); load(); }}
           onDelete={() => remove(open)}
@@ -539,11 +545,27 @@ function ClientsPage({ token, user }) {
   );
 }
 
-function ClientDrawer({ client, token, onClose, onSaved, onDelete }) {
+function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
   const [c, setC] = useState(client);
   const [saving, setSaving] = useState(false);
+  const isAdmin = user?.role === 'admin';
 
   const set = (k, v) => setC({ ...c, [k]: v });
+
+  const removeService = (idx) => {
+    const s = c.services[idx];
+    if (!window.confirm(`Remove "${s.name}" from this client?`)) return;
+    set('services', c.services.filter((_, i) => i !== idx));
+  };
+
+  const addService = (name) => {
+    if (!name) return;
+    const svc = SERVICES.find(s => s.name === name);
+    if (!svc) return;
+    set('services', [...(c.services || []), { ...svc, status: 'pending' }]);
+  };
+
+  const servicesTotal = (c.services || []).reduce((s, x) => s + Number(x.price || 0), 0);
 
   const save = async () => {
     setSaving(true);
@@ -635,7 +657,7 @@ function ClientDrawer({ client, token, onClose, onSaved, onDelete }) {
             </Field>
           </div>
 
-          <Field label="Services">
+          <Field label={`Services — ${money(servicesTotal)}`}>
             {(c.services || []).map((s, idx) => (
               <div key={idx} className="svc-line">
                 <span>{s.name}</span>
@@ -649,9 +671,18 @@ function ClientDrawer({ client, token, onClose, onSaved, onDelete }) {
                   <option value="in_progress">in progress</option>
                   <option value="completed">completed</option>
                 </select>
+                <button type="button" className="btn-ghost sm danger" title="Remove this service"
+                  onClick={() => removeService(idx)}>×</button>
               </div>
             ))}
-            {(c.services || []).length === 0 && <p className="muted">No services selected.</p>}
+            {(c.services || []).length === 0 && <p className="muted">No services on this client yet.</p>}
+
+            <select className="add-svc" value="" onChange={e => addService(e.target.value)}>
+              <option value="">+ Add a service…</option>
+              {SERVICES.filter(s => !(c.services || []).some(x => x.name === s.name))
+                .map(s => <option key={s.name} value={s.name}>{s.name} — {money(s.price)}</option>)}
+            </select>
+            <p className="muted">Changes to services save when you hit Save changes.</p>
           </Field>
 
           <div className="toggles">
@@ -662,7 +693,9 @@ function ClientDrawer({ client, token, onClose, onSaved, onDelete }) {
         </div>
 
         <div className="drawer-foot">
-          <button className="btn-danger" onClick={onDelete}>Delete</button>
+          {isAdmin
+            ? <button className="btn-danger" onClick={onDelete}>Delete client</button>
+            : <span className="muted">Only an admin can delete a client</span>}
           <button className="btn-primary" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
@@ -867,7 +900,8 @@ function ProductPage() {
    INVOICES
    ============================================================ */
 
-function InvoicesPage({ token }) {
+function InvoicesPage({ token, user }) {
+  const isAdmin = user?.role === 'admin';
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
   const [creating, setCreating] = useState(false);
@@ -890,9 +924,13 @@ function InvoicesPage({ token }) {
   };
 
   const remove = async (inv) => {
-    if (!window.confirm('Delete this invoice?')) return;
-    await axios.delete(`${API_URL}/invoices/${inv.id}`, auth(token));
-    load();
+    if (!window.confirm(`Delete ${inv.invoice_number}?`)) return;
+    try {
+      await axios.delete(`${API_URL}/invoices/${inv.id}`, auth(token));
+      load();
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Could not delete');
+    }
   };
 
   const outstanding = invoices.filter(i => i.status !== 'paid')
@@ -944,7 +982,7 @@ function InvoicesPage({ token }) {
                 </td>
                 <td className="right">
                   <button className="btn-ghost sm" onClick={() => setView(i)}>View</button>
-                  <button className="btn-ghost sm danger" onClick={() => remove(i)}>Delete</button>
+                  {isAdmin && <button className="btn-ghost sm danger" onClick={() => remove(i)}>Delete</button>}
                 </td>
               </tr>
             ))}
@@ -1431,8 +1469,9 @@ function Styles() {
       .drawer-head h3{margin:0;font-size:16px}
       .drawer-body{padding:20px;overflow-y:auto;flex:1}
       .drawer-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px}
-      .svc-line{display:grid;grid-template-columns:1fr auto 130px;gap:10px;align-items:center;
+      .svc-line{display:grid;grid-template-columns:1fr auto 130px auto;gap:10px;align-items:center;
         padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+      .add-svc{margin-top:10px;border-style:dashed;color:var(--accent)}
       .line-item{display:grid;grid-template-columns:1fr 120px auto;gap:8px;margin-bottom:8px}
       .preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
       .preset{background:var(--surface-2);border:1px dashed var(--line);color:var(--muted);
