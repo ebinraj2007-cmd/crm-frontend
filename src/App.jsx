@@ -1,0 +1,1027 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import io from 'socket.io-client';
+
+const API_URL = process.env.REACT_APP_API_URL || 'https://crm-backend-production-5488.up.railway.app/api';
+const socket = io(process.env.REACT_APP_API_URL?.replace('/api', '') || 'https://crm-backend-production-5488.up.railway.app');
+
+export default function CRMApp() {
+  const [user, setUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState('login');
+  const [token, setToken] = useState(localStorage.getItem('token'));
+
+  useEffect(() => {
+    if (token) {
+      setCurrentPage('dashboard');
+    }
+  }, [token]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    setCurrentPage('login');
+  };
+
+  if (!token) {
+    return <LoginPage setToken={setToken} setUser={setUser} />;
+  }
+
+  return (
+    <div className="crm-container">
+      <header className="crm-header">
+        <h1>💼 Digital Services CRM</h1>
+        <div className="user-info">
+          <span>{user?.name} ({user?.role})</span>
+          <button onClick={handleLogout}>Logout</button>
+        </div>
+      </header>
+
+      <nav className="crm-nav">
+        <button onClick={() => setCurrentPage('dashboard')} className={currentPage === 'dashboard' ? 'active' : ''}>
+          📊 Dashboard
+        </button>
+        <button onClick={() => setCurrentPage('clients')} className={currentPage === 'clients' ? 'active' : ''}>
+          👥 Clients
+        </button>
+        <button onClick={() => setCurrentPage('new-client')} className={currentPage === 'new-client' ? 'active' : ''}>
+          ➕ New Client
+        </button>
+        {user?.role === 'admin' && (
+          <button onClick={() => setCurrentPage('team')} className={currentPage === 'team' ? 'active' : ''}>
+            👨‍💼 Team
+          </button>
+        )}
+      </nav>
+
+      <main className="crm-content">
+        {currentPage === 'login' && <LoginPage setToken={setToken} setUser={setUser} />}
+        {currentPage === 'dashboard' && <DashboardPage token={token} setUser={setUser} userRole={user?.role} />}
+        {currentPage === 'clients' && <ClientsPage token={token} userRole={user?.role} />}
+        {currentPage === 'new-client' && <NewClientPage token={token} setPage={setCurrentPage} />}
+        {currentPage === 'team' && <TeamPage token={token} />}
+      </main>
+
+      <style jsx>{`
+        .crm-container {
+          min-height: 100vh;
+          background: #f5f5f5;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .crm-header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .crm-header h1 {
+          margin: 0;
+          font-size: 28px;
+        }
+
+        .user-info {
+          display: flex;
+          gap: 15px;
+          align-items: center;
+        }
+
+        .user-info button {
+          background: rgba(255,255,255,0.2);
+          border: 1px solid white;
+          color: white;
+          padding: 8px 15px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: 500;
+        }
+
+        .user-info button:hover {
+          background: rgba(255,255,255,0.3);
+        }
+
+        .crm-nav {
+          background: white;
+          padding: 10px 20px;
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .crm-nav button {
+          background: #f0f0f0;
+          border: 1px solid #ddd;
+          padding: 10px 20px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: 500;
+        }
+
+        .crm-nav button.active {
+          background: #667eea;
+          color: white;
+          border-color: #667eea;
+        }
+
+        .crm-content {
+          padding: 20px;
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function LoginPage({ setToken, setUser }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const endpoint = isRegister ? '/auth/register' : '/auth/login';
+      const payload = isRegister
+        ? { name, email, password, phone }
+        : { email, password };
+
+      const res = await axios.post(`${API_URL}${endpoint}`, payload);
+      localStorage.setItem('token', res.data.token);
+      setToken(res.data.token);
+      setUser(res.data.user);
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.msg || error.message));
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="login-container">
+      <div className="login-card">
+        <h1>💼 Digital Services CRM</h1>
+        <h2>{isRegister ? 'Create Account' : 'Login'}</h2>
+
+        <form onSubmit={handleSubmit}>
+          {isRegister && (
+            <>
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+              <input
+                type="tel"
+                placeholder="Phone Number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </>
+          )}
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          <button type="submit" disabled={loading}>{loading ? 'Loading...' : isRegister ? 'Register' : 'Login'}</button>
+        </form>
+
+        <p className="toggle-auth">
+          {isRegister ? 'Already have account? ' : "Don't have account? "}
+          <a onClick={() => setIsRegister(!isRegister)}>
+            {isRegister ? 'Login' : 'Register'}
+          </a>
+        </p>
+      </div>
+
+      <style jsx>{`
+        .login-container {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .login-card {
+          background: white;
+          padding: 40px;
+          border-radius: 8px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+          width: 100%;
+          max-width: 400px;
+        }
+
+        .login-card h1 {
+          text-align: center;
+          color: #667eea;
+          margin-bottom: 10px;
+        }
+
+        .login-card h2 {
+          text-align: center;
+          color: #333;
+          margin-bottom: 30px;
+          font-size: 20px;
+        }
+
+        form {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        input {
+          padding: 12px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 14px;
+          font-family: inherit;
+        }
+
+        input:focus {
+          outline: none;
+          border-color: #667eea;
+          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+          padding: 12px;
+          background: #667eea;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+          background: #764ba2;
+        }
+
+        button:disabled {
+          opacity: 0.6;
+        }
+
+        .toggle-auth {
+          text-align: center;
+          margin-top: 20px;
+          color: #666;
+        }
+
+        .toggle-auth a {
+          color: #667eea;
+          cursor: pointer;
+          font-weight: 600;
+          text-decoration: none;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function DashboardPage({ token, setUser, userRole }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/analytics/dashboard`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setStats(res.data);
+    } catch (error) {
+      console.log('Error:', error);
+    }
+  };
+
+  if (!stats) return <div>Loading...</div>;
+
+  return (
+    <div className="dashboard">
+      <h2>📊 Dashboard</h2>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon">👥</div>
+          <div className="stat-content">
+            <div className="stat-title">Total Clients</div>
+            <div className="stat-value">{stats.totalClients}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">📂</div>
+          <div className="stat-content">
+            <div className="stat-title">Active Projects</div>
+            <div className="stat-value">{stats.activeProjects}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="service-section">
+        <h3>Service Status</h3>
+        {Object.entries(stats.serviceStats || {}).map(([service, counts]) => (
+          <div key={service} className="service-item">
+            <span>{service}</span>
+            <div className="service-progress">
+              <span className="pending">{counts.pending}P</span>
+              <span className="in-progress">{counts.in_progress}IP</span>
+              <span className="completed">{counts.completed}C</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <style jsx>{`
+        .dashboard h2 {
+          margin-bottom: 20px;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 15px;
+          margin-bottom: 30px;
+        }
+
+        .stat-card {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .stat-icon {
+          font-size: 32px;
+        }
+
+        .stat-title {
+          color: #999;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+
+        .stat-value {
+          color: #333;
+          font-size: 24px;
+          font-weight: 700;
+          margin-top: 5px;
+        }
+
+        .service-section {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .service-section h3 {
+          margin-top: 0;
+          margin-bottom: 20px;
+        }
+
+        .service-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 0;
+          border-bottom: 1px solid #eee;
+        }
+
+        .service-progress {
+          display: flex;
+          gap: 8px;
+        }
+
+        .service-progress span {
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .service-progress .pending { background: #ffe0e0; color: #c00; }
+        .service-progress .in-progress { background: #fff8dc; color: #b8860b; }
+        .service-progress .completed { background: #e8f5e9; color: #2e7d32; }
+      `}</style>
+    </div>
+  );
+}
+
+function ClientsPage({ token, userRole }) {
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState(null);
+
+  useEffect(() => {
+    fetchClients();
+
+    socket.on('client-updated', (updated) => {
+      setClients(cs => cs.map(c => c.id === updated.id ? updated : c));
+    });
+
+    return () => socket.off('client-updated');
+  }, []);
+
+  const fetchClients = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/clients`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setClients(res.data);
+    } catch (error) {
+      console.log('Error:', error);
+    }
+  };
+
+  const handleUpdate = async () => {
+    try {
+      await axios.put(`${API_URL}/clients/${selectedClient.id}`, selectedClient, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchClients();
+    } catch (error) {
+      alert('Error updating client');
+    }
+  };
+
+  return (
+    <div className="clients-page">
+      <h2>👥 Clients</h2>
+
+      <div className="clients-container">
+        <div className="clients-list">
+          {clients.map(client => (
+            <div
+              key={client.id}
+              className={`client-card ${selectedClient?.id === client.id ? 'selected' : ''}`}
+              onClick={() => setSelectedClient(client)}
+            >
+              <h3>{client.business_name}</h3>
+              <p>{client.contact_person} | {client.phone}</p>
+              <p className="client-services">{client.services?.length || 0} services</p>
+            </div>
+          ))}
+        </div>
+
+        {selectedClient && (
+          <div className="client-detail">
+            <h3>{selectedClient.business_name}</h3>
+
+            <div className="detail-field">
+              <label>Contact Person</label>
+              <input
+                type="text"
+                value={selectedClient.contact_person}
+                onChange={(e) => setSelectedClient({ ...selectedClient, contact_person: e.target.value })}
+              />
+            </div>
+
+            <div className="detail-field">
+              <label>Email</label>
+              <input
+                type="email"
+                value={selectedClient.email}
+                onChange={(e) => setSelectedClient({ ...selectedClient, email: e.target.value })}
+              />
+            </div>
+
+            <div className="detail-field">
+              <label>Phone</label>
+              <input
+                type="tel"
+                value={selectedClient.phone}
+                onChange={(e) => setSelectedClient({ ...selectedClient, phone: e.target.value })}
+              />
+            </div>
+
+            <div className="detail-field">
+              <label>Services ({selectedClient.services?.length || 0})</label>
+              {selectedClient.services?.map((service, idx) => (
+                <div key={idx} className="service-badge">
+                  {service.name} - AED {service.price}
+                  <select value={service.status} onChange={(e) => {
+                    const updated = [...selectedClient.services];
+                    updated[idx].status = e.target.value;
+                    setSelectedClient({ ...selectedClient, services: updated });
+                  }}>
+                    <option>pending</option>
+                    <option>in_progress</option>
+                    <option>completed</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="detail-field">
+              <label>Notes</label>
+              <textarea
+                value={selectedClient.notes || ''}
+                onChange={(e) => setSelectedClient({ ...selectedClient, notes: e.target.value })}
+              />
+            </div>
+
+            <button onClick={handleUpdate} className="btn-save">Save Changes</button>
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .clients-page h2 {
+          margin-bottom: 20px;
+        }
+
+        .clients-container {
+          display: grid;
+          grid-template-columns: 1fr 350px;
+          gap: 20px;
+        }
+
+        .clients-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .client-card {
+          background: white;
+          padding: 15px;
+          border-radius: 6px;
+          cursor: pointer;
+          border-left: 4px solid #ddd;
+          transition: all 0.3s;
+        }
+
+        .client-card:hover {
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          border-left-color: #667eea;
+        }
+
+        .client-card.selected {
+          background: #f0f4ff;
+          border-left-color: #667eea;
+        }
+
+        .client-card h3 {
+          margin: 0 0 8px 0;
+          font-size: 16px;
+        }
+
+        .client-card p {
+          margin: 5px 0;
+          color: #666;
+          font-size: 13px;
+        }
+
+        .client-services {
+          color: #667eea;
+          font-weight: 600;
+        }
+
+        .client-detail {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .client-detail h3 {
+          margin-top: 0;
+          margin-bottom: 20px;
+        }
+
+        .detail-field {
+          margin-bottom: 15px;
+        }
+
+        .detail-field label {
+          display: block;
+          font-weight: 600;
+          color: #666;
+          margin-bottom: 5px;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+
+        .detail-field input,
+        .detail-field textarea {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-family: inherit;
+          font-size: 14px;
+        }
+
+        .service-badge {
+          background: #f5f5f5;
+          padding: 8px;
+          border-radius: 4px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin: 5px 0;
+          font-size: 12px;
+        }
+
+        .service-badge select {
+          padding: 4px;
+          border: 1px solid #ddd;
+          border-radius: 3px;
+          font-size: 12px;
+        }
+
+        .btn-save {
+          width: 100%;
+          padding: 10px;
+          background: #667eea;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: 600;
+          margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+          .clients-container {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function NewClientPage({ token, setPage }) {
+  const [formData, setFormData] = useState({
+    businessName: '',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    industry: '',
+    location: '',
+    services: []
+  });
+
+  const SERVICES = [
+    { name: 'Business Website', category: 'Digital Presence', price: 800 },
+    { name: 'Google Business Profile', category: 'Digital Presence', price: 300 },
+    { name: 'Local SEO', category: 'Digital Presence', price: 500 },
+    { name: 'WhatsApp AI Front Desk', category: 'WhatsApp Automation', price: 1000 },
+    { name: 'Appointment Reminders', category: 'WhatsApp Automation', price: 400 },
+    { name: 'CRM Setup', category: 'CRM Operations', price: 600 },
+    { name: 'E-Invoicing Setup', category: 'CRM Operations', price: 400 },
+    { name: 'Review Automation', category: 'Reputation', price: 300 },
+    { name: 'Competitor Monitoring', category: 'Reputation', price: 350 },
+    { name: 'Cybersecurity Audit', category: 'Security', price: 500 }
+  ];
+
+  const handleServiceToggle = (service) => {
+    const isSelected = formData.services.some(s => s.name === service.name);
+    const newServices = isSelected
+      ? formData.services.filter(s => s.name !== service.name)
+      : [...formData.services, { ...service, status: 'pending' }];
+
+    setFormData({ ...formData, services: newServices });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.businessName || formData.services.length === 0) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    try {
+      await axios.post(`${API_URL}/clients`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      alert('Client added successfully!');
+      setPage('clients');
+    } catch (error) {
+      alert('Error: ' + error.response?.data?.msg);
+    }
+  };
+
+  const totalAmount = formData.services.reduce((sum, s) => sum + s.price, 0);
+
+  return (
+    <div className="new-client-page">
+      <h2>➕ Add New Client</h2>
+
+      <form onSubmit={handleSubmit}>
+        <div className="form-section">
+          <h3>Client Information</h3>
+
+          <input
+            type="text"
+            placeholder="Business Name *"
+            value={formData.businessName}
+            onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+            required
+          />
+
+          <input
+            type="text"
+            placeholder="Contact Person"
+            value={formData.contactPerson}
+            onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+          />
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
+
+          <input
+            type="tel"
+            placeholder="Phone"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          />
+
+          <select value={formData.industry} onChange={(e) => setFormData({ ...formData, industry: e.target.value })}>
+            <option value="">Select Industry</option>
+            <option>Salon</option>
+            <option>Clinic</option>
+            <option>Restaurant</option>
+            <option>Retail</option>
+            <option>Other</option>
+          </select>
+
+          <input
+            type="text"
+            placeholder="Location"
+            value={formData.location}
+            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+          />
+        </div>
+
+        <div className="form-section">
+          <h3>Select Services *</h3>
+
+          {SERVICES.map(service => (
+            <label key={service.name} className="service-checkbox">
+              <input
+                type="checkbox"
+                checked={formData.services.some(s => s.name === service.name)}
+                onChange={() => handleServiceToggle(service)}
+              />
+              <span>{service.name}</span>
+              <span className="price">AED {service.price}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="summary">
+          <div>Services: {formData.services.length}</div>
+          <div className="total">Total: AED {totalAmount}</div>
+        </div>
+
+        <div className="form-actions">
+          <button type="submit" className="btn-primary">Add Client</button>
+          <button type="button" className="btn-secondary" onClick={() => setPage('clients')}>Cancel</button>
+        </div>
+      </form>
+
+      <style jsx>{`
+        .new-client-page h2 {
+          margin-bottom: 20px;
+        }
+
+        form {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          max-width: 600px;
+        }
+
+        .form-section {
+          margin-bottom: 25px;
+        }
+
+        .form-section h3 {
+          margin: 0 0 15px 0;
+        }
+
+        input, select {
+          width: 100%;
+          padding: 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          margin-bottom: 10px;
+          font-family: inherit;
+          font-size: 14px;
+        }
+
+        input:focus, select:focus {
+          outline: none;
+          border-color: #667eea;
+        }
+
+        .service-checkbox {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          margin-bottom: 8px;
+          cursor: pointer;
+        }
+
+        .service-checkbox input {
+          margin: 0;
+          width: auto;
+        }
+
+        .service-checkbox span {
+          flex: 1;
+          font-size: 14px;
+        }
+
+        .service-checkbox .price {
+          color: #667eea;
+          font-weight: 600;
+        }
+
+        .summary {
+          background: #f5f5f5;
+          padding: 15px;
+          border-radius: 4px;
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 20px;
+        }
+
+        .summary .total {
+          font-weight: 700;
+          color: #667eea;
+        }
+
+        .form-actions {
+          display: flex;
+          gap: 10px;
+        }
+
+        .btn-primary, .btn-secondary {
+          flex: 1;
+          padding: 10px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+
+        .btn-primary {
+          background: #667eea;
+          color: white;
+        }
+
+        .btn-secondary {
+          background: #f0f0f0;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function TeamPage({ token }) {
+  const [repAnalytics, setRepAnalytics] = useState([]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
+
+  const fetchAnalytics = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/analytics/all-reps`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRepAnalytics(res.data);
+    } catch (error) {
+      console.log('Error:', error);
+    }
+  };
+
+  return (
+    <div className="team-page">
+      <h2>👨‍💼 Team Overview</h2>
+
+      <div className="reps-grid">
+        {repAnalytics.map(rep => (
+          <div key={rep.repId} className="rep-card">
+            <h3>{rep.repName}</h3>
+            <p className="email">{rep.email}</p>
+
+            <div className="rep-stats">
+              <div className="stat">
+                <div className="label">Clients</div>
+                <div className="value">{rep.clientCount}</div>
+              </div>
+            </div>
+
+            <div className="last-client">
+              Last client: {rep.lastClient ? new Date(rep.lastClient).toLocaleDateString() : 'N/A'}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <style jsx>{`
+        .team-page h2 {
+          margin-bottom: 20px;
+        }
+
+        .reps-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 20px;
+        }
+
+        .rep-card {
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          border-top: 4px solid #667eea;
+        }
+
+        .rep-card h3 {
+          margin: 0 0 5px 0;
+        }
+
+        .email {
+          color: #999;
+          font-size: 12px;
+          margin-bottom: 15px;
+        }
+
+        .rep-stats {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+          margin-bottom: 15px;
+          padding-bottom: 15px;
+          border-bottom: 1px solid #eee;
+        }
+
+        .stat {
+          text-align: center;
+        }
+
+        .label {
+          color: #999;
+          font-size: 12px;
+        }
+
+        .value {
+          color: #667eea;
+          font-size: 20px;
+          font-weight: 700;
+          margin-top: 5px;
+        }
+
+        .last-client {
+          font-size: 12px;
+          color: #666;
+        }
+      `}</style>
+    </div>
+  );
+}
