@@ -1312,13 +1312,14 @@ function Styles() {
       /* top bar */
       .topbar{display:flex;align-items:center;gap:24px;padding:0 22px;height:60px;
         background:var(--surface);border-bottom:1px solid var(--line);
-        position:sticky;top:0;z-index:50}
+        position:sticky;top:0;z-index:120}
       .brand{display:flex;align-items:center;gap:10px}
       .brand-mark{width:30px;height:30px;border-radius:7px;background:var(--accent);color:#04252b;
         display:grid;place-items:center;font-weight:800;font-size:12px;letter-spacing:.5px}
       .brand-name{font-weight:600;font-size:15px;white-space:nowrap}
       .nav{display:flex;gap:4px;flex:1;overflow-x:auto}
       .nav-btn{background:none;border:0;color:var(--muted);padding:8px 13px;border-radius:7px;
+        -webkit-tap-highlight-color:rgba(0,229,255,.2);touch-action:manipulation;
         font-size:14px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.15s}
       .nav-btn:hover{color:var(--text);background:#242424}
       .nav-btn.active{color:var(--accent);background:rgba(0,229,255,.09)}
@@ -1468,7 +1469,7 @@ function Styles() {
       .form-foot .btn-ghost{margin-right:8px}
 
       /* drawer */
-      .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;justify-content:flex-end}
+      .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;justify-content:flex-end}
       .drawer{width:520px;max-width:100%;background:var(--surface);border-left:1px solid var(--line);
         display:flex;flex-direction:column;height:100vh}
       .wide-drawer{width:640px}
@@ -1519,11 +1520,11 @@ function Styles() {
           padding-top:12px;color:#F87171}
         .nav{display:none;position:fixed;top:60px;left:0;right:0;background:var(--surface);
           border-bottom:1px solid var(--line);flex-direction:column;gap:2px;padding:10px;
-          z-index:80;max-height:calc(100vh - 60px);overflow-y:auto;
+          z-index:130;max-height:calc(100vh - 60px);overflow-y:auto;-webkit-overflow-scrolling:touch;
           box-shadow:0 18px 34px rgba(0,0,0,.5)}
         .nav.open{display:flex}
         .nav-btn{width:100%;text-align:left;padding:14px 16px;font-size:15px;border-radius:8px}
-        .menu-scrim{display:block;position:fixed;inset:60px 0 0;background:rgba(0,0,0,.5);z-index:70}
+        .menu-scrim{display:block;position:fixed;inset:60px 0 0;background:rgba(0,0,0,.45);z-index:60}
         .brand-name{font-size:14px}
         .who-name{display:none}
       }
