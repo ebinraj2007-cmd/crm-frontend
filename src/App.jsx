@@ -10,16 +10,16 @@ const socket = io(process.env.REACT_APP_API_URL?.replace('/api', '') || 'https:/
    ============================================================ */
 
 const SERVICES = [
-  { name: 'Business Website', category: 'Digital Presence', price: 800 },
-  { name: 'Google Business Profile', category: 'Digital Presence', price: 300 },
-  { name: 'Local SEO', category: 'Digital Presence', price: 500 },
-  { name: 'WhatsApp AI Front Desk', category: 'WhatsApp Automation', price: 1000 },
-  { name: 'Appointment Reminders', category: 'WhatsApp Automation', price: 400 },
-  { name: 'CRM Setup', category: 'CRM Operations', price: 600 },
-  { name: 'E-Invoicing Setup', category: 'CRM Operations', price: 400 },
-  { name: 'Review Automation', category: 'Reputation', price: 300 },
-  { name: 'Competitor Monitoring', category: 'Reputation', price: 350 },
-  { name: 'Cybersecurity Audit', category: 'Security', price: 500 }
+  { name: 'Business Website', category: 'Digital Presence' },
+  { name: 'Google Business Profile', category: 'Digital Presence' },
+  { name: 'Local SEO', category: 'Digital Presence' },
+  { name: 'WhatsApp AI Front Desk', category: 'WhatsApp Automation' },
+  { name: 'Appointment Reminders', category: 'WhatsApp Automation' },
+  { name: 'CRM Setup', category: 'CRM Operations' },
+  { name: 'E-Invoicing Setup', category: 'CRM Operations' },
+  { name: 'Review Automation', category: 'Reputation' },
+  { name: 'Competitor Monitoring', category: 'Reputation' },
+  { name: 'Cybersecurity Audit', category: 'Security' }
 ];
 
 const SOURCES = [
@@ -34,11 +34,11 @@ const SOURCES = [
 const sourceLabel = (v) => SOURCES.find(s => s.value === v)?.label || 'Other';
 
 const COMMON_EXTRAS = [
-  { label: 'Domain purchase (1 year)', amount: 60 },
-  { label: 'Hosting (1 year)', amount: 350 },
-  { label: 'Business email setup', amount: 200 },
-  { label: 'WhatsApp API number', amount: 150 },
-  { label: 'Logo / branding', amount: 400 }
+  { label: 'Domain purchase (1 year)', amount: 0 },
+  { label: 'Hosting (1 year)', amount: 0 },
+  { label: 'Business email setup', amount: 0 },
+  { label: 'WhatsApp API number', amount: 0 },
+  { label: 'Logo / branding', amount: 0 }
 ];
 
 const money = (n) => `AED ${Number(n || 0).toLocaleString()}`;
@@ -570,7 +570,7 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
     if (!name) return;
     const svc = SERVICES.find(s => s.name === name);
     if (!svc) return;
-    set('services', [...(c.services || []), { ...svc, status: 'pending' }]);
+    set('services', [...(c.services || []), { ...svc, price: '', status: 'pending' }]);
   };
 
   const servicesTotal = (c.services || []).reduce((s, x) => s + Number(x.price || 0), 0);
@@ -589,7 +589,7 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
       source: c.source,
       priority: c.priority,
       deadline: c.deadline || null,
-      services: c.services,
+      services: (c.services || []).map(s => ({ ...s, price: Number(s.price || 0) })),
       interested: !!c.interested,
       demo_requested: !!c.demo_requested,
       completed: !!c.completed,
@@ -669,7 +669,12 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
             {(c.services || []).map((s, idx) => (
               <div key={idx} className="svc-line">
                 <span>{s.name}</span>
-                <span className="muted">{money(s.price)}</span>
+                <input type="number" min="0" className="svc-price-input" placeholder="0"
+                  value={s.price ?? ''} onChange={e => {
+                    const services = [...c.services];
+                    services[idx] = { ...services[idx], price: e.target.value };
+                    set('services', services);
+                  }} />
                 <select value={s.status || 'pending'} onChange={e => {
                   const services = [...c.services];
                   services[idx] = { ...services[idx], status: e.target.value };
@@ -688,7 +693,7 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
             <select className="add-svc" value="" onChange={e => addService(e.target.value)}>
               <option value="">+ Add a service…</option>
               {SERVICES.filter(s => !(c.services || []).some(x => x.name === s.name))
-                .map(s => <option key={s.name} value={s.name}>{s.name} — {money(s.price)}</option>)}
+                .map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
             </select>
             <p className="muted">Changes to services save when you hit Save changes.</p>
           </Field>
@@ -745,17 +750,26 @@ function NewClientPage({ token, setPage }) {
   const toggleService = (svc) => {
     const on = f.services.some(s => s.name === svc.name);
     set('services', on ? f.services.filter(s => s.name !== svc.name)
-                       : [...f.services, { ...svc, status: 'pending' }]);
+                       : [...f.services, { ...svc, price: '', status: 'pending' }]);
   };
 
-  const total = f.services.reduce((s, x) => s + x.price, 0);
+  const setPrice = (name, price) =>
+    set('services', f.services.map(s => (s.name === name ? { ...s, price } : s)));
+
+  const priceOf = (name) => f.services.find(s => s.name === name)?.price ?? '';
+
+  const total = f.services.reduce((s, x) => s + Number(x.price || 0), 0);
 
   const submit = async (e) => {
     e.preventDefault();
     if (!f.businessName) return alert('Business name is required');
     setSaving(true);
     try {
-      await axios.post(`${API_URL}/clients`, { ...f, deadline: f.deadline || null }, auth(token));
+      await axios.post(`${API_URL}/clients`, {
+        ...f,
+        deadline: f.deadline || null,
+        services: f.services.map(s => ({ ...s, price: Number(s.price || 0) }))
+      }, auth(token));
       setPage('clients');
     } catch (err) {
       alert('Error: ' + (err.response?.data?.error || err.response?.data?.msg || 'failed'));
@@ -829,15 +843,25 @@ function NewClientPage({ token, setPage }) {
 
         <section className="card pad-card span-2">
           <h3>Services discussed</h3>
+          <p className="muted" style={{ marginBottom: 12 }}>Tap a service to select it, then type the price you quoted this client.</p>
           <div className="svc-grid">
             {SERVICES.map(s => {
               const on = f.services.some(x => x.name === s.name);
               return (
-                <button type="button" key={s.name} className={`svc-pick ${on ? 'on' : ''}`} onClick={() => toggleService(s)}>
-                  <span className="svc-name">{s.name}</span>
-                  <span className="svc-cat">{s.category}</span>
-                  <span className="svc-price">{money(s.price)}</span>
-                </button>
+                <div key={s.name} className={`svc-pick ${on ? 'on' : ''}`}>
+                  <button type="button" className="svc-toggle" onClick={() => toggleService(s)}>
+                    <span className="svc-name">{on ? '\u2713 ' : ''}{s.name}</span>
+                    <span className="svc-cat">{s.category}</span>
+                  </button>
+                  {on && (
+                    <div className="svc-quote">
+                      <span className="cur">AED</span>
+                      <input type="number" min="0" placeholder="Your quote"
+                        value={priceOf(s.name)}
+                        onChange={e => setPrice(s.name, e.target.value)} />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -868,19 +892,19 @@ function ProductPage() {
     <div className="page">
       <div className="page-head">
         <h2>Product</h2>
-        <p className="muted">What we sell, and what we charge for it.</p>
+        <p className="muted">What we sell. Every price is quoted per client — you set the amount when you add the client or raise the invoice.</p>
       </div>
 
       {cats.map(cat => (
         <section className="card pad-card" key={cat}>
           <h3>{cat}</h3>
           <table className="table">
-            <thead><tr><th>Service</th><th style={{ width: 160 }}>Price</th></tr></thead>
+            <thead><tr><th>Service</th><th style={{ width: 200 }}>Price</th></tr></thead>
             <tbody>
               {SERVICES.filter(s => s.category === cat).map(s => (
                 <tr key={s.name}>
                   <td data-label="Service" className="strong">{s.name}</td>
-                  <td data-label="Price" className="accent-text">{money(s.price)}</td>
+                  <td data-label="Price" className="muted">Quoted per client</td>
                 </tr>
               ))}
             </tbody>
@@ -891,14 +915,14 @@ function ProductPage() {
       <section className="card pad-card">
         <h3>Common add-on charges</h3>
         <table className="table">
-          <thead><tr><th>Item</th><th style={{ width: 160 }}>Typical cost</th></tr></thead>
+          <thead><tr><th>Item</th></tr></thead>
           <tbody>
             {COMMON_EXTRAS.map(e => (
-              <tr key={e.label}><td data-label="Item">{e.label}</td><td data-label="Cost" className="accent-text">{money(e.amount)}</td></tr>
+              <tr key={e.label}><td data-label="Item">{e.label}</td></tr>
             ))}
           </tbody>
         </table>
-        <p className="muted">These get added as line items when you raise an invoice.</p>
+        <p className="muted">One tap adds these to an invoice, then you type the amount you're charging.</p>
       </section>
     </div>
   );
@@ -1455,13 +1479,18 @@ function Styles() {
       .span-2{grid-column:1 / -1}
       @media(max-width:1000px){.form-grid{grid-template-columns:1fr}}
       .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
-      .svc-pick{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:13px;
-        text-align:left;cursor:pointer;color:var(--text);font-family:inherit;display:flex;flex-direction:column;gap:3px}
+      .svc-pick{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;
+        color:var(--text);overflow:hidden}
       .svc-pick:hover{border-color:#3d3d3d}
       .svc-pick.on{border-color:var(--accent);background:rgba(0,229,255,.06)}
+      .svc-toggle{width:100%;background:none;border:0;color:var(--text);font-family:inherit;
+        text-align:left;cursor:pointer;padding:13px;display:flex;flex-direction:column;gap:3px}
       .svc-name{font-size:13.5px;font-weight:600}
       .svc-cat{font-size:11px;color:var(--muted)}
-      .svc-price{font-size:13px;color:var(--accent);margin-top:4px}
+      .svc-quote{display:flex;align-items:center;gap:8px;padding:0 13px 13px}
+      .svc-quote .cur{font-size:12px;color:var(--muted)}
+      .svc-quote input{padding:8px 10px}
+      .svc-price-input{padding:6px 8px;font-size:12.5px;text-align:right}
       .form-foot{display:flex;justify-content:space-between;align-items:center;margin-top:18px;
         padding-top:16px;border-top:1px solid var(--line);gap:12px;flex-wrap:wrap}
       .total-box{display:flex;flex-direction:column;gap:2px}
@@ -1478,7 +1507,7 @@ function Styles() {
       .drawer-head h3{margin:0;font-size:16px}
       .drawer-body{padding:20px;overflow-y:auto;flex:1}
       .drawer-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px}
-      .svc-line{display:grid;grid-template-columns:1fr auto 130px auto;gap:10px;align-items:center;
+      .svc-line{display:grid;grid-template-columns:1fr 100px 130px auto;gap:8px;align-items:center;
         padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
       .add-svc{margin-top:10px;border-style:dashed;color:var(--accent)}
       .line-item{display:grid;grid-template-columns:1fr 120px auto;gap:8px;margin-bottom:8px}
@@ -1573,7 +1602,7 @@ function Styles() {
         .drawer{width:100%}
         .wide-drawer{width:100%}
         .drawer-body{padding:16px}
-        .svc-line{grid-template-columns:1fr auto;gap:8px}
+        .svc-line{grid-template-columns:1fr 100px;gap:8px}
         .svc-line select{grid-column:1 / -1}
         .line-item{grid-template-columns:1fr auto;gap:8px}
         .line-item input[type=number]{grid-column:1}
