@@ -230,6 +230,9 @@ function DashboardPage({ token, user }) {
   const demos = clients.filter(c => c.demo_requested).length;
   const highPriority = clients.filter(c => c.priority === 'high' && !c.completed).length;
   const pipeline = clients.filter(c => !c.completed).reduce((s, c) => s + (c.total_amount || 0), 0);
+  const collected = clients.reduce((s, c) => s + (c.paid ? Number(c.amount_received || 0) : 0), 0);
+  const awaiting = clients.filter(c => c.completed && !c.paid)
+    .reduce((s, c) => s + Number(c.total_amount || 0), 0);
 
   const serviceStats = {};
   clients.forEach(c => (c.services || []).forEach(s => {
@@ -255,6 +258,8 @@ function DashboardPage({ token, user }) {
         <Stat label="Demos requested" value={demos} tone="info" />
         <Stat label="High priority" value={highPriority} tone="warn" />
         <Stat label="Open pipeline" value={money(pipeline)} />
+        <Stat label="Collected" value={money(collected)} tone="good" />
+        <Stat label="Done, awaiting payment" value={money(awaiting)} tone="warn" />
       </div>
 
       <div className="grid-2">
@@ -423,6 +428,28 @@ function ClientsPage({ token, user }) {
     await axios.put(`${API_URL}/clients/${id}`, fields, auth(token));
   };
 
+  const toggleDone = async (c) => {
+    if (c.completed) {
+      if (!window.confirm(`Mark ${c.business_name} as NOT completed?`)) return;
+      return patch(c.id, { completed: false });
+    }
+    patch(c.id, { completed: true });
+  };
+
+  const togglePaid = async (c) => {
+    if (c.paid) {
+      if (!window.confirm(`Undo payment of ${money(c.amount_received)} for ${c.business_name}?`)) return;
+      return patch(c.id, { paid: false, amount_received: 0 });
+    }
+    const suggested = c.total_amount || 0;
+    const entered = window.prompt(
+      `How much did ${c.business_name} pay? (AED)`, String(suggested));
+    if (entered === null) return;
+    const amount = Number(String(entered).replace(/[^0-9.]/g, ''));
+    if (!amount || amount <= 0) return alert('Enter an amount greater than 0.');
+    patch(c.id, { paid: true, amount_received: amount, paid_at: new Date().toISOString() });
+  };
+
   const move = async (index, dir) => {
     const target = index + dir;
     if (target < 0 || target >= clients.length) return;
@@ -473,12 +500,13 @@ function ClientsPage({ token, user }) {
               <th style={{ width: 110 }}>Added</th>
               <th style={{ width: 140 }}>Deadline</th>
               <th style={{ width: 110 }}>Priority</th>
+              <th style={{ width: 150 }}>Progress</th>
               <th style={{ width: 70 }}></th>
             </tr>
           </thead>
           <tbody>
             {list.length === 0 && (
-              <tr><td colSpan={isAdmin ? 9 : 8} className="muted pad">No clients yet.</td></tr>
+              <tr><td colSpan={isAdmin ? 10 : 9} className="muted pad">No clients yet.</td></tr>
             )}
             {list.map((c, i) => (
               <tr key={c.id} className={c.completed ? 'is-done' : ''}>
@@ -501,6 +529,7 @@ function ClientsPage({ token, user }) {
                     {c.interested ? <span className="chip good">interested</span> : null}
                     {c.demo_requested ? <span className="chip info">demo</span> : null}
                     {c.completed ? <span className="chip done">completed</span> : null}
+                    {c.paid ? <span className="chip paid">paid {money(c.amount_received)}</span> : null}
                   </div>
                 </td>
 
@@ -530,6 +559,21 @@ function ClientsPage({ token, user }) {
                     <option value="medium">medium</option>
                     <option value="low">low</option>
                   </select>
+                </td>
+
+                <td data-label="Progress">
+                  <div className="progress-cell">
+                    <button className={`pill-btn ${c.completed ? 'on-done' : ''}`}
+                      title={c.completed ? 'Completed — click to undo' : 'Mark the work as finished'}
+                      onClick={() => toggleDone(c)}>
+                      {c.completed ? '\u2713 Done' : 'Mark done'}
+                    </button>
+                    <button className={`pill-btn ${c.paid ? 'on-paid' : ''}`}
+                      title={c.paid ? `Paid ${money(c.amount_received)} — click to undo` : 'Record the money received'}
+                      onClick={() => togglePaid(c)}>
+                      {c.paid ? money(c.amount_received) : 'Mark paid'}
+                    </button>
+                  </div>
                 </td>
 
                 <td data-label=""><button className="btn-ghost sm wide-mobile" onClick={() => setOpen(c)}>Open details</button></td>
@@ -593,6 +637,8 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
       interested: !!c.interested,
       demo_requested: !!c.demo_requested,
       completed: !!c.completed,
+      paid: !!c.paid,
+      amount_received: Number(c.amount_received || 0),
       project_cost: Number(c.project_cost || 0)
     }, auth(token));
     setSaving(false);
@@ -665,6 +711,13 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
             </Field>
           </div>
 
+          <div className="two">
+            <Field label="Amount received (AED)">
+              <input type="number" value={c.amount_received || 0}
+                onChange={e => set('amount_received', e.target.value)} />
+            </Field>
+          </div>
+
           <Field label={`Services — ${money(servicesTotal)}`}>
             {(c.services || []).map((s, idx) => (
               <div key={idx} className="svc-line">
@@ -702,6 +755,7 @@ function ClientDrawer({ client, token, user, onClose, onSaved, onDelete }) {
             <Toggle label="Interested" checked={!!c.interested} onChange={v => set('interested', v)} />
             <Toggle label="Demo requested by email" checked={!!c.demo_requested} onChange={v => set('demo_requested', v)} />
             <Toggle label="Project completed" checked={!!c.completed} onChange={v => set('completed', v)} />
+            <Toggle label="Payment received" checked={!!c.paid} onChange={v => set('paid', v)} />
           </div>
         </div>
 
@@ -1208,12 +1262,12 @@ function InvoiceView({ invoice, onClose }) {
 
 function FinancePage({ token }) {
   const [rows, setRows] = useState([]);
-  const [totals, setTotals] = useState({ revenue: 0, cost: 0, profit: 0 });
+  const [totals, setTotals] = useState({ revenue: 0, cost: 0, profit: 0, received: 0 });
 
   const load = useCallback(async () => {
     const { data } = await axios.get(`${API_URL}/analytics/finance`, auth(token));
     setRows(data.projects || []);
-    setTotals(data.totals || { revenue: 0, cost: 0, profit: 0 });
+    setTotals(data.totals || { revenue: 0, cost: 0, profit: 0, received: 0 });
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
@@ -1236,6 +1290,8 @@ function FinancePage({ token }) {
       <div className="stat-row">
         <Stat label="Revenue" value={money(totals.revenue)} tone="info" />
         <Stat label="Cost" value={money(totals.cost)} tone="warn" />
+        <Stat label="Collected" value={money(totals.received)} tone="good" />
+        <Stat label="Still owed" value={money(Math.max(0, totals.revenue - totals.received))} tone="warn" />
         <Stat label="Profit" value={money(totals.profit)} tone="good" />
         <Stat label="Margin" value={`${margin}%`} />
         <Stat label="Projects done" value={rows.length} />
@@ -1246,11 +1302,11 @@ function FinancePage({ token }) {
           <thead>
             <tr>
               <th>Project</th><th>Rep</th><th>Completed</th>
-              <th>Revenue</th><th style={{ width: 150 }}>Cost</th><th>Profit</th><th>Margin</th>
+              <th>Revenue</th><th>Received</th><th style={{ width: 150 }}>Cost</th><th>Profit</th><th>Margin</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={7} className="muted pad">No completed projects yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={8} className="muted pad">No completed projects yet.</td></tr>}
             {rows.map(r => {
               const profit = (r.revenue || 0) - (r.cost || 0);
               const m = r.revenue ? Math.round((profit / r.revenue) * 100) : 0;
@@ -1260,6 +1316,9 @@ function FinancePage({ token }) {
                   <td data-label="Rep" className="sub">{r.rep || '—'}</td>
                   <td data-label="Completed" className="sub">{fmtDate(r.updated_at || r.created_at)}</td>
                   <td data-label="Revenue">{money(r.revenue)}</td>
+                  <td data-label="Received" className={r.received >= r.revenue ? 'pos' : 'neg'}>
+                    {money(r.received)}
+                  </td>
                   <td data-label="Cost">
                     <input type="number" className="cell-input" value={r.cost || 0}
                       onChange={e => setCost(r, e.target.value)} />
@@ -1397,6 +1456,14 @@ function Styles() {
       .chip.good{background:rgba(74,222,128,.13);color:#4ADE80}
       .chip.info{background:rgba(0,229,255,.13);color:var(--accent)}
       .chip.danger{background:rgba(248,113,113,.18);color:#F87171}
+      .chip.paid{background:rgba(74,222,128,.16);color:#4ADE80;font-weight:600}
+      .progress-cell{display:flex;flex-direction:column;gap:6px}
+      .pill-btn{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);
+        border-radius:20px;padding:5px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;
+        white-space:nowrap;transition:.15s}
+      .pill-btn:hover{border-color:var(--accent);color:var(--accent)}
+      .pill-btn.on-done{background:rgba(74,222,128,.14);border-color:rgba(74,222,128,.45);color:#4ADE80}
+      .pill-btn.on-paid{background:rgba(0,229,255,.14);border-color:rgba(0,229,255,.45);color:var(--accent)}
       .chip.admin-only{background:rgba(0,229,255,.1);color:var(--accent);font-weight:500}
 
       /* tables */
@@ -1593,6 +1660,8 @@ function Styles() {
         .company{font-size:16px;text-align:right;width:100%}
         .flags{justify-content:flex-end}
         .sub{text-align:right}
+        .progress-cell{flex-direction:row;gap:8px}
+        .pill-btn{padding:9px 14px;font-size:13px}
         .rank{flex-direction:row;gap:14px}
         .arrow{font-size:15px;padding:6px 12px;border:1px solid var(--line);border-radius:7px}
         .wide-mobile{width:100%;margin:4px 0 0;padding:11px}
